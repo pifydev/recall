@@ -1,0 +1,43 @@
+# @pify/recall
+
+[![CI](https://github.com/pifydev/recall/actions/workflows/ci.yml/badge.svg)](https://github.com/pifydev/recall/actions/workflows/ci.yml) [![npm version](https://img.shields.io/npm/v/@pify/recall)](https://www.npmjs.com/package/@pify/recall) [![npm downloads](https://img.shields.io/npm/dm/@pify/recall)](https://www.npmjs.com/package/@pify/recall)
+
+Full-text search across your past [pi](https://github.com/earendil-works/pi) sessions. A `session_search` tool over the local session logs, so the agent can recall what it did before — a decision, a fix, a command, a discussion — instead of re-deriving it.
+
+Part of the [Pify suite](https://github.com/pifydev). Install with [`pify install recall`](https://github.com/pifydev/cli) or `pi install npm:@pify/recall`.
+
+## Why
+
+Everything you and the agent worked through is already on disk: pi writes every session to a JSONL log. But the moment a session ends, that knowledge is unreachable — the next session starts blank, and the agent happily re-solves a problem it cracked last week. Recall makes those logs searchable so "we did this before" becomes a lookup instead of a redo.
+
+## The tool
+
+`session_search` — full-text search over the user prompts and assistant messages in your past sessions.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `query` | string | Distinctive terms — an identifier, an error string, a feature name |
+| `limit` | number, optional | Max results (default 10, max 25) |
+
+It returns the most relevant snippets with their session id and date, ranked by how many of your query terms each message contains (newest first on a tie). Query with the terms that make a session distinctive, not a whole sentence.
+
+```
+3 matches for "oauth token refresh", most relevant first:
+
+[2026-09-10 · assistant · 2026-09-10]
+  …added refreshToken() to auth.ts…
+```
+
+`/recall` shows the index status; `/recall <query>` searches from the command line; `/recall reindex` rebuilds from scratch.
+
+## How it works
+
+At session start (and lazily before each search) it syncs an inverted index of your session logs: only files whose size or mtime changed are re-read, so a steady corpus costs almost nothing. The index is one JSON file under `<agentDir>/recall/`, written atomically; a corrupt or wrong-version file is simply rebuilt. The corpus is bounded (newest sessions win the budget) so it never grows without limit, and the live session is excluded from its own results.
+
+**Pure JavaScript, no native FTS engine.** `node:sqlite` would be elegant, but it is absent under Bun and flag-gated on Node < 24 — a sqlite index would silently fail for a large share of users. A plain inverted index works on every runtime the suite supports, with **zero runtime dependencies**. Everything is local: no network, no LLM tokens.
+
+Results are snippets from earlier sessions for orientation, not current truth — the tool's own guidance tells the agent to verify against the code as it is now before acting on them.
+
+## License
+
+MIT © [Pify maintainers](https://github.com/pifydev)

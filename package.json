@@ -1,0 +1,76 @@
+{
+  "name": "@pify/recall",
+  "version": "0.1.0",
+  "description": "Full-text search across your past pi sessions: a session_search tool over the local session logs, so the agent can recall what it did before",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "pify",
+    "recall",
+    "search",
+    "sessions",
+    "memory"
+  ],
+  "homepage": "https://github.com/pifydev/recall#readme",
+  "bugs": {
+    "url": "https://github.com/pifydev/recall/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pifydev/recall.git"
+  },
+  "license": "MIT",
+  "author": "Pify maintainers",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "files": [
+    "extensions",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/recall.ts"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prepublishOnly": "npm run typecheck && npm test"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.85.1",
+    "@earendil-works/pi-coding-agent": "^0.85.1",
+    "@earendil-works/pi-tui": "^0.85.1",
+    "@types/node": "^22.10.2",
+    "typebox": "^1.1.38",
+    "typescript": "^5.7.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
