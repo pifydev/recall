@@ -81,7 +81,13 @@ export default function recall(pi: ExtensionAPI) {
       query: Type.String({ description: "Distinctive search terms (identifiers, error text, feature names)" }),
       limit: Type.Optional(Type.Number({ description: "Max results (default 10, max 25)" })),
     }),
-    async execute(_id, params: { query: string; limit?: number }): Promise<{
+    async execute(
+      _id,
+      params: { query: string; limit?: number },
+      _signal: AbortSignal | undefined,
+      _onUpdate: unknown,
+      ctx: ExtensionContext,
+    ): Promise<{
       content: Array<{ type: "text"; text: string }>;
       details: Record<string, unknown>;
       isError?: boolean;
@@ -94,7 +100,10 @@ export default function recall(pi: ExtensionAPI) {
         // fall through to a search over whatever is already loaded
       }
       const limit = Math.max(1, Math.min(25, Math.round(params.limit ?? 10)));
-      const excludePath = process.env.PI_SESSION_FILE || undefined;
+      // Skip the live session so recall never echoes the conversation in progress.
+      // The path comes from the session manager; pi does not set PI_SESSION_FILE in
+      // the extension's process env, so read ctx first and keep the env as a fallback.
+      const excludePath = ctx?.sessionManager.getSessionFile() ?? process.env.PI_SESSION_FILE ?? undefined;
       const hits = search(index, query, { limit, excludePath });
       return {
         content: [{ type: "text", text: formatHits(query, hits) }],
@@ -134,7 +143,8 @@ export default function recall(pi: ExtensionAPI) {
       } catch {
         // best-effort
       }
-      const hits = search(index, arg, { limit: 10, excludePath: process.env.PI_SESSION_FILE || undefined });
+      const excludePath = ctx?.sessionManager.getSessionFile() ?? process.env.PI_SESSION_FILE ?? undefined;
+      const hits = search(index, arg, { limit: 10, excludePath });
       ctx.ui.notify(formatHits(arg, hits), "info");
     },
   });
