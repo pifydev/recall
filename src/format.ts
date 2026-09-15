@@ -24,7 +24,7 @@ export function formatHits(query: string, hits: SearchHit[], maxChars = DEFAULT_
   let used = header.length;
   let shown = 0;
   for (const h of hits) {
-    const block = `\n\n[${h.session} · ${h.role}${day(h.ts)}]\n  ${h.snippet}`;
+    const block = `\n\n[${h.title ?? h.session} · ${h.role}${day(h.ts)}]\n  ${h.snippet}`;
     if (used + block.length > maxChars && shown > 0) {
       lines.push(`\n\n… ${hits.length - shown} more omitted — narrow the query.`);
       break;

@@ -24,6 +24,7 @@ import { listSessionFiles, readSessionDocs } from "../src/sessions.ts";
 import { syncIndex, docCount } from "../src/index-core.ts";
 import { search } from "../src/search.ts";
 import { formatHits } from "../src/format.ts";
+import { firstUserText, sessionTitle } from "../src/title.ts";
 import { emptyIndex, type RecallIndex } from "../src/types.ts";
 
 type UiContext = ExtensionContext;
@@ -53,6 +54,7 @@ export default function recall(pi: ExtensionAPI) {
 
   pi.on("session_start", async () => {
     paths();
+    named = false;
     // Fire-and-forget: never delay session start on indexing.
     const t = setTimeout(() => {
       try {
@@ -62,6 +64,27 @@ export default function recall(pi: ExtensionAPI) {
       }
     }, 0);
     t.unref?.();
+  });
+
+  /** Whether this session's naming attempt has already happened. */
+  let named = false;
+
+  // A session with no display name is an opaque log id — in pi's picker and in
+  // this package's own results. The first thing you typed is the best label, so
+  // set it once, only when nothing else has named the session. Best-effort and
+  // never destructive: an existing name (yours or another extension's) wins.
+  // Opt out with PIFY_RECALL_NO_AUTONAME=1.
+  pi.on("before_agent_start", async (_event, ctx) => {
+    if (named) return;
+    named = true;
+    if (process.env.PIFY_RECALL_NO_AUTONAME === "1") return;
+    try {
+      if (ctx.sessionManager.getSessionName()) return;
+      const title = sessionTitle(firstUserText(ctx.sessionManager.getBranch() as unknown[]));
+      if (title) pi.setSessionName(title);
+    } catch {
+      // Naming is a nicety; it must never interfere with a turn.
+    }
   });
 
   pi.registerTool({

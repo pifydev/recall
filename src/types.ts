@@ -15,6 +15,8 @@ export interface Doc {
   role: string;
   /** The message text, bounded to a cap. */
   text: string;
+  /** The session's display name (pi `session_info`), when it has one. */
+  title?: string;
 }
 
 /** What we remember about a file so an unchanged one is skipped next time. */
@@ -36,7 +38,7 @@ export interface RecallIndex {
   postings: Record<string, number[]>;
 }
 
-export const INDEX_VERSION = 1;
+export const INDEX_VERSION = 2;
 
 export function emptyIndex(): RecallIndex {
   return { version: INDEX_VERSION, nextId: 1, files: {}, docs: {}, postings: {} };
@@ -44,6 +46,8 @@ export function emptyIndex(): RecallIndex {
 
 export interface SearchHit {
   session: string;
+  /** The session's display name, when it has one — nicer than the raw id. */
+  title?: string;
   path: string;
   ts: number;
   role: string;

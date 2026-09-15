@@ -52,6 +52,7 @@ export function readSessionDocs(path: string): Doc[] {
   }
   const session = basename(path).replace(/\.jsonl$/, "");
   const docs: Doc[] = [];
+  let title: string | undefined;
   for (const line of raw.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -61,10 +62,23 @@ export function readSessionDocs(path: string): Doc[] {
     } catch {
       continue;
     }
+    // pi records a session's display name as a `session_info` entry, and the
+    // latest one wins — including when it is written after the messages it
+    // will end up labelling, so the title is applied once the file is read.
+    const named = sessionInfoName(obj);
+    if (named) title = named;
     const doc = docFromEntry(obj, session, path);
     if (doc) docs.push(doc);
   }
+  if (title) for (const doc of docs) doc.title = title;
   return docs;
+}
+
+/** The display name carried by a pi `session_info` entry, if this is one. */
+export function sessionInfoName(entry: unknown): string | undefined {
+  if (!isRecord(entry) || entry.type !== "session_info") return undefined;
+  const name = entry.name;
+  return typeof name === "string" && name.trim() ? name.trim() : undefined;
 }
 
 /** Exposed for tests: turn one parsed entry into a doc, or null to skip it. */

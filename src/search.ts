@@ -60,6 +60,7 @@ export function search(index: RecallIndex, query: string, opts: SearchOptions = 
     if (opts.excludePath && doc.path === opts.excludePath) continue;
     hits.push({
       session: doc.session,
+      title: doc.title,
       path: doc.path,
       ts: doc.ts,
       role: doc.role,

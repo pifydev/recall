@@ -30,6 +30,19 @@ It returns the most relevant snippets with their session id and date, ranked by 
 
 `/recall` shows the index status; `/recall <query>` searches from the command line; `/recall reindex` rebuilds from scratch.
 
+## Session names
+
+A session with no display name is an opaque log id — in pi's session picker, and in this package's own results. So the first thing you type becomes the session's name, once, and only when nothing else has named it: an existing name (yours, or another extension's) always wins, and the attempt happens at most once per session. A bare slash command (`/resume`) is skipped — it says nothing about the work.
+
+Results are then labelled with that name instead of the id:
+
+```
+[add a retry to the uploader · user · 3d ago]
+  ...the matching snippet...
+```
+
+Names are read back out of pi's own `session_info` entries, so a session you named by hand is labelled correctly too, and a session that never got one still falls back to its id. Opt out with `PIFY_RECALL_NO_AUTONAME=1`. (Idea from trim21/pi-extensions.)
+
 ## How it works
 
 At session start (and lazily before each search) it syncs an inverted index of your session logs: only files whose size or mtime changed are re-read, so a steady corpus costs almost nothing. The index is one JSON file under `<agentDir>/recall/`, written atomically; a corrupt or wrong-version file is simply rebuilt. The corpus is bounded (newest sessions win the budget) so it never grows without limit, and the live session is excluded from its own results.
