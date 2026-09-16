@@ -101,7 +101,9 @@ test("session_search tool excludes the live session via ctx.sessionManager", asy
       assert.ok(!text.includes("[live "), `live session must be excluded — got:\n${text}`);
       assert.ok(text.includes("[past "), `past session must be present — got:\n${text}`);
       assert.equal(res.details.count, 1, "only the past session should be returned");
-      assert.equal(res.details.indexed, 2, "both sessions are indexed, one is filtered from results");
+      // The live file is not even read while it is live: it grows every turn
+      // and used to force a full postings rebuild on every search.
+      assert.equal(res.details.indexed, 1, "only the past session is indexed; the live one is skipped, not filtered");
     });
   } finally {
     rmSync(root, { recursive: true, force: true });

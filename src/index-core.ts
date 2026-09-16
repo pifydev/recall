@@ -22,6 +22,14 @@ export interface SyncOptions {
   maxDocs?: number;
   /** Per-doc text cap so one huge message can't dominate the index. */
   maxDocChars?: number;
+  /**
+   * The session file being written right now. It grows every turn, so its
+   * size and mtime never match what was recorded — and one changed file
+   * meant re-reading it, rebuilding every posting in the corpus and rewriting
+   * the whole index on EVERY search. Its hits are excluded from results
+   * anyway; it is indexed once it is no longer live.
+   */
+  skipPath?: string;
 }
 
 const DEFAULT_MAX_DOCS = 20_000;
@@ -52,6 +60,7 @@ export function syncIndex(
   let docCount = Object.keys(index.docs).length;
 
   for (const f of sorted) {
+    if (opts.skipPath !== undefined && f.path === opts.skipPath) continue; // live: read later
     const known = index.files[f.path];
     if (known && known.size === f.size && known.mtimeMs === f.mtimeMs) continue; // unchanged
 
@@ -78,9 +87,16 @@ export function syncIndex(
   return changed;
 }
 
-/** Rebuild term→ids from the current docs. Cheap for a bounded corpus. */
+/**
+ * Rebuild term→ids from the current docs. Cheap for a bounded corpus.
+ *
+ * The map has no prototype. A term is any word a session contained, and
+ * "constructor" or "__proto__" are words: on a plain object those resolve to
+ * the inherited members, so `??=` never assigned and `.push` threw — one
+ * session mentioning a constructor broke the build for every session.
+ */
 function rebuildPostings(index: RecallIndex): void {
-  const postings: Record<string, number[]> = {};
+  const postings: Record<string, number[]> = Object.create(null);
   const ids = Object.keys(index.docs)
     .map(Number)
     .sort((a, b) => a - b);

@@ -42,3 +42,22 @@ test("a wrong-version or corrupt file is discarded, not thrown", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("REGRESSION: a persisted __proto__/constructor term survives the JSON round trip", () => {
+  const dir = mkdtempSync(join(tmpdir(), "recall-persist-"));
+  try {
+    const p = join(dir, "recall", "index.json");
+    const idx = emptyIndex();
+    idx.docs[1] = { session: "s", path: "/p", ts: 0, role: "user", text: "constructor __proto__" };
+    idx.postings["constructor"] = [1];
+    idx.postings["__proto__"] = [1];
+    saveIndex(p, idx);
+    const back = loadIndex(p);
+    assert.equal(Object.getPrototypeOf(back.postings), null);
+    assert.deepEqual(back.postings["constructor"], [1]);
+    assert.deepEqual(back.postings["__proto__"], [1]);
+    assert.ok(Object.hasOwn(back.postings, "__proto__"), "a plain key, not the prototype link");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

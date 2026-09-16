@@ -41,7 +41,9 @@ export interface RecallIndex {
 export const INDEX_VERSION = 2;
 
 export function emptyIndex(): RecallIndex {
-  return { version: INDEX_VERSION, nextId: 1, files: {}, docs: {}, postings: {} };
+  // postings has no prototype: its keys are words from sessions, and words
+  // include "constructor". See rebuildPostings.
+  return { version: INDEX_VERSION, nextId: 1, files: {}, docs: {}, postings: Object.create(null) };
 }
 
 export interface SearchHit {

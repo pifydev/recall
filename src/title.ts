@@ -47,6 +47,19 @@ export function firstUserText(entries: readonly unknown[]): string {
 }
 
 /**
+ * What to name the session after, given where the hook runs. pi fires
+ * before_agent_start with the user's prompt still in a local array — it is
+ * appended to the session later, from the agent's own message event — so on
+ * a fresh session the branch holds no user text yet and the name must come
+ * from the event's prompt. The branch is still preferred: on /resume of an
+ * unnamed session it holds the ORIGINAL first prompt, which is what "the
+ * first thing you typed" means, not whatever was typed just now.
+ */
+export function namingText(branch: readonly unknown[], prompt: string | undefined): string {
+  return firstUserText(branch) || (prompt ?? "").trim();
+}
+
+/**
  * A concise session name from a prompt: first meaningful line, stripped of
  * markdown and shell decoration, cut at a word boundary. Returns "" when there
  * is nothing worth naming the session after (empty, or a bare slash command —

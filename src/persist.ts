@@ -18,6 +18,11 @@ export function loadIndex(path: string): RecallIndex {
       isRecord(raw.postings) &&
       typeof raw.nextId === "number"
     ) {
+      // JSON.parse hands back plain objects; the postings map must have no
+      // prototype so a persisted "constructor" or "__proto__" term stays a
+      // plain key (JSON.parse stores "__proto__" as an own property, and
+      // assigning it onto a null-prototype target keeps it one).
+      raw.postings = Object.assign(Object.create(null), raw.postings);
       return raw as unknown as RecallIndex;
     }
   } catch {

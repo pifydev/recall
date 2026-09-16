@@ -24,7 +24,7 @@ import { listSessionFiles, readSessionDocs } from "../src/sessions.ts";
 import { syncIndex, docCount } from "../src/index-core.ts";
 import { search } from "../src/search.ts";
 import { formatHits } from "../src/format.ts";
-import { firstUserText, sessionTitle } from "../src/title.ts";
+import { namingText, sessionTitle } from "../src/title.ts";
 import { emptyIndex, type RecallIndex } from "../src/types.ts";
 
 type UiContext = ExtensionContext;
@@ -41,24 +41,40 @@ export default function recall(pi: ExtensionAPI) {
     sessionsDir = join(dir, "sessions");
   }
 
-  /** Load once, then bring the index up to date against the session files. */
-  function sync(): void {
+  /**
+   * Load once, then bring the index up to date against the session files.
+   * The live session is skipped: it grows every turn, so it can never look
+   * unchanged, and one changed file meant rebuilding every posting and
+   * rewriting the whole index on every search. Its hits are excluded from
+   * results anyway; it is indexed once it is no longer the live one.
+   */
+  function sync(livePath?: string): void {
     if (!indexPath) paths();
     if (!loaded) {
       index = loadIndex(indexPath);
       loaded = true;
     }
     const files = listSessionFiles(sessionsDir);
-    if (syncIndex(index, files, readSessionDocs)) saveIndex(indexPath, index);
+    if (syncIndex(index, files, readSessionDocs, { skipPath: livePath })) saveIndex(indexPath, index);
   }
 
-  pi.on("session_start", async () => {
+  /** The file pi is writing this session into, when the host can say. */
+  function liveFile(ctx: { sessionManager?: { getSessionFile?: () => string | undefined } } | undefined): string | undefined {
+    try {
+      return ctx?.sessionManager?.getSessionFile?.() ?? process.env.PI_SESSION_FILE ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  pi.on("session_start", async (_event, ctx) => {
     paths();
     named = false;
+    const live = liveFile(ctx);
     // Fire-and-forget: never delay session start on indexing.
     const t = setTimeout(() => {
       try {
-        sync();
+        sync(live);
       } catch {
         // A recall index is a cache; a failed build must not surface.
       }
@@ -74,14 +90,29 @@ export default function recall(pi: ExtensionAPI) {
   // set it once, only when nothing else has named the session. Best-effort and
   // never destructive: an existing name (yours or another extension's) wins.
   // Opt out with PIFY_RECALL_NO_AUTONAME=1.
-  pi.on("before_agent_start", async (_event, ctx) => {
+  pi.on("before_agent_start", async (event, ctx) => {
     if (named) return;
-    named = true;
-    if (process.env.PIFY_RECALL_NO_AUTONAME === "1") return;
+    if (process.env.PIFY_RECALL_NO_AUTONAME === "1") {
+      named = true;
+      return;
+    }
     try {
-      if (ctx.sessionManager.getSessionName()) return;
-      const title = sessionTitle(firstUserText(ctx.sessionManager.getBranch() as unknown[]));
-      if (title) pi.setSessionName(title);
+      if (ctx.sessionManager.getSessionName()) {
+        named = true;
+        return;
+      }
+      // The prompt is not in the branch yet when this fires (pi appends it
+      // later, from the agent's message event), so on a fresh session the
+      // branch alone yielded "" and the session was never named. The event
+      // carries the prompt; the branch still wins when it has one.
+      const prompt = (event as { prompt?: string }).prompt;
+      const title = sessionTitle(namingText(ctx.sessionManager.getBranch() as unknown[], prompt));
+      // Only a produced name ends the attempt: a first prompt that yields
+      // nothing (a bare slash command) leaves the next turn its chance.
+      if (title) {
+        pi.setSessionName(title);
+        named = true;
+      }
     } catch {
       // Naming is a nicety; it must never interfere with a turn.
     }
@@ -117,16 +148,16 @@ export default function recall(pi: ExtensionAPI) {
     }> {
       const query = String(params.query ?? "").trim();
       if (!query) return { content: [{ type: "text", text: "Empty query." }], details: {}, isError: true };
+      // Skip the live session so recall never echoes the conversation in progress.
+      // The path comes from the session manager; pi does not set PI_SESSION_FILE in
+      // the extension's process env, so read ctx first and keep the env as a fallback.
+      const excludePath = liveFile(ctx);
       try {
-        sync();
+        sync(excludePath);
       } catch {
         // fall through to a search over whatever is already loaded
       }
       const limit = Math.max(1, Math.min(25, Math.round(params.limit ?? 10)));
-      // Skip the live session so recall never echoes the conversation in progress.
-      // The path comes from the session manager; pi does not set PI_SESSION_FILE in
-      // the extension's process env, so read ctx first and keep the env as a fallback.
-      const excludePath = ctx?.sessionManager.getSessionFile() ?? process.env.PI_SESSION_FILE ?? undefined;
       const hits = search(index, query, { limit, excludePath });
       return {
         content: [{ type: "text", text: formatHits(query, hits) }],
@@ -140,9 +171,10 @@ export default function recall(pi: ExtensionAPI) {
     handler: async (args, ctx: UiContext) => {
       if (!ctx.hasUI) return;
       const arg = (args ?? "").trim();
+      const excludePath = liveFile(ctx);
       if (arg === "" || arg === "status") {
         try {
-          sync();
+          sync(excludePath);
         } catch {
           // best-effort
         }
@@ -154,7 +186,7 @@ export default function recall(pi: ExtensionAPI) {
         index = emptyIndex();
         loaded = true;
         try {
-          sync();
+          sync(excludePath);
         } catch {
           // best-effort
         }
@@ -162,11 +194,10 @@ export default function recall(pi: ExtensionAPI) {
         return;
       }
       try {
-        sync();
+        sync(excludePath);
       } catch {
         // best-effort
       }
-      const excludePath = ctx?.sessionManager.getSessionFile() ?? process.env.PI_SESSION_FILE ?? undefined;
       const hits = search(index, arg, { limit: 10, excludePath });
       ctx.ui.notify(formatHits(arg, hits), "info");
     },

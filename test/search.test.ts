@@ -64,3 +64,17 @@ test("no match returns nothing (not a throw)", () => {
   const idx = indexOf([doc("a", "hello world")]);
   assert.deepEqual(search(idx, "nonexistentterm"), []);
 });
+
+test("REGRESSION: searching for a word that is also an Object.prototype member", () => {
+  const idx = emptyIndex();
+  syncIndex(idx, [{ path: "/s/a.jsonl", size: 1, mtimeMs: 1 }, { path: "/s/b.jsonl", size: 1, mtimeMs: 2 }], (p) =>
+    p === "/s/a.jsonl"
+      ? [{ session: "a", path: p, ts: 1, role: "user", text: "why does the constructor run twice" }]
+      : [{ session: "b", path: p, ts: 2, role: "user", text: "unrelated" }],
+  );
+  const hits = search(idx, "constructor");
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]!.session, "a");
+  // A prototype member no session ever said is simply not found — not a throw.
+  assert.deepEqual(search(idx, "valueOf"), []);
+});

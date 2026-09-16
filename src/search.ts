@@ -27,7 +27,9 @@ export function search(index: RecallIndex, query: string, opts: SearchOptions = 
 
   const scores = new Map<number, number>();
   for (const term of terms) {
-    const ids = index.postings[term];
+    // Own keys only: a query for "constructor" must find sessions that said
+    // it, not Object.prototype.constructor — which is not iterable and threw.
+    const ids = Object.hasOwn(index.postings, term) ? index.postings[term] : undefined;
     if (!ids) continue;
     for (const id of ids) scores.set(id, (scores.get(id) ?? 0) + 1);
   }

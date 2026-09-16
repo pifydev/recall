@@ -91,3 +91,46 @@ test("per-doc text is capped", () => {
   const only = Object.values(idx.docs)[0]!;
   assert.equal(only.text.length, 100);
 });
+
+test("REGRESSION: a term named like an Object.prototype member indexes and is searchable", () => {
+  // "constructor" and "__proto__" are words a session about JavaScript will
+  // contain. On a plain-object postings map they resolved to the inherited
+  // members: `??=` never assigned and `.push` threw, so one such session
+  // broke the build for every session.
+  const idx = emptyIndex();
+  const files: FileRef[] = [{ path: "/s/a.jsonl", size: 10, mtimeMs: 1 }];
+  syncIndex(idx, files, reader({
+    "/s/a.jsonl": [doc("a", "the constructor sets __proto__ and hasOwnProperty toString valueOf")],
+  }));
+  assert.deepEqual(idx.postings["constructor"], [1]);
+  assert.deepEqual(idx.postings["__proto__"], [1]);
+  assert.deepEqual(idx.postings["hasownproperty"] ?? idx.postings["hasOwnProperty"], [1]);
+  assert.equal(Object.getPrototypeOf(idx.postings), null, "no prototype to inherit from");
+});
+
+test("the live session file is skipped, so a growing session does not dirty the index", () => {
+  const idx = emptyIndex();
+  const live = "/s/live.jsonl";
+  const files: FileRef[] = [
+    { path: "/s/a.jsonl", size: 10, mtimeMs: 1 },
+    { path: live, size: 10, mtimeMs: 2 },
+  ];
+  let reads = 0;
+  const read = (p: string) => {
+    reads++;
+    return p === live ? [doc("live", "in progress")] : [doc("a", "finished work")];
+  };
+  assert.equal(syncIndex(idx, files, read, { skipPath: live }), true);
+  assert.equal(reads, 1, "the live file is not read");
+  assert.equal(idx.files[live], undefined);
+
+  // The live file grew — the very thing that used to force a full rebuild.
+  files[1] = { path: live, size: 900, mtimeMs: 3 };
+  reads = 0;
+  assert.equal(syncIndex(idx, files, read, { skipPath: live }), false, "nothing changed from the index's point of view");
+  assert.equal(reads, 0);
+
+  // Once it is no longer live, it is indexed like any other file.
+  assert.equal(syncIndex(idx, files, read), true);
+  assert.equal(docCount(idx), 2);
+});

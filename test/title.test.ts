@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { firstUserText, sessionTitle } from "../src/title.ts";
+import { firstUserText, namingText, sessionTitle } from "../src/title.ts";
 import { docFromEntry, sessionInfoName, readSessionDocs } from "../src/sessions.ts";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -77,4 +77,17 @@ test("an unnamed session leaves docs untitled (the id is used)", () => {
   const doc = docFromEntry({ message: { role: "user", content: "hello" } }, "sess-1", "/p.jsonl");
   assert.equal(doc?.title, undefined);
   assert.equal(doc?.session, "sess-1");
+});
+
+test("REGRESSION: a fresh session is named from the event's prompt, a resumed one from its first prompt", () => {
+  // before_agent_start fires before the prompt is in the branch, so the
+  // branch alone yielded "" on every new session and nothing was ever named.
+  assert.equal(namingText([], "fix the flaky spawn test"), "fix the flaky spawn test");
+  assert.equal(namingText([], undefined), "");
+  // The branch wins when it has user text: on /resume, the original prompt.
+  const branch = [{ message: { role: "user", content: "original question" } }];
+  assert.equal(namingText(branch, "a later prompt"), "original question");
+  // Injected messages are not user text; the prompt fills in.
+  const injected = [{ customType: "memory-context", message: { role: "user", content: "INJECTED" } }];
+  assert.equal(namingText(injected, "typed"), "typed");
 });

@@ -41,11 +41,11 @@ Results are then labelled with that name instead of the id:
   ...the matching snippet...
 ```
 
-Names are read back out of pi's own `session_info` entries, so a session you named by hand is labelled correctly too, and a session that never got one still falls back to its id. Opt out with `PIFY_RECALL_NO_AUTONAME=1`. (Idea from trim21/pi-extensions.)
+Names are read back out of pi's own `session_info` entries, so a session you named by hand is labelled correctly too, and a session that never got one still falls back to its id. A fresh session is named from the prompt that starts it (pi has not appended that prompt to the session yet when the hook runs, which is why earlier versions never named anything new); a resumed session keeps its original first prompt as the name. Opt out with `PIFY_RECALL_NO_AUTONAME=1`. (Idea from trim21/pi-extensions.)
 
 ## How it works
 
-At session start (and lazily before each search) it syncs an inverted index of your session logs: only files whose size or mtime changed are re-read, so a steady corpus costs almost nothing. The index is one JSON file under `<agentDir>/recall/`, written atomically; a corrupt or wrong-version file is simply rebuilt. The corpus is bounded (newest sessions win the budget) so it never grows without limit, and the live session is excluded from its own results.
+At session start (and lazily before each search) it syncs an inverted index of your session logs: only files whose size or mtime changed are re-read, so a steady corpus costs almost nothing. The live session is not read at all while it is live — it grows every turn, so it could never look unchanged, and one changed file used to mean rebuilding every posting and rewriting the whole index on every search; it is indexed once it is no longer the one being written, and it never appears in its own results either way. The index is one JSON file under `<agentDir>/recall/`, written atomically; a corrupt or wrong-version file is simply rebuilt. The corpus is bounded (newest sessions win the budget) so it never grows without limit. Words are words: a session that talks about `constructor` or `__proto__` indexes and searches like any other (the postings map has no prototype to collide with).
 
 **Pure JavaScript, no native FTS engine.** `node:sqlite` would be elegant, but it is absent under Bun and flag-gated on Node < 24 — a sqlite index would silently fail for a large share of users. A plain inverted index works on every runtime the suite supports, with **zero runtime dependencies**. Everything is local: no network, no LLM tokens.
 
