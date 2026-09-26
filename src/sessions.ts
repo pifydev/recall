@@ -8,6 +8,7 @@
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
+import { sessionTitle } from "./title.ts";
 import type { Doc } from "./types.ts";
 import { isRecord } from "./types.ts";
 
@@ -53,6 +54,7 @@ export function readSessionDocs(path: string): Doc[] {
   const session = basename(path).replace(/\.jsonl$/, "");
   const docs: Doc[] = [];
   let title: string | undefined;
+  let firstTyped: string | undefined;
   for (const line of raw.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -62,6 +64,15 @@ export function readSessionDocs(path: string): Doc[] {
     } catch {
       continue;
     }
+    // The first thing the user typed, for a session nobody named: injected
+    // custom messages are not user input and are skipped, as title.ts does.
+    if (firstTyped === undefined && isRecord(obj) && typeof obj.customType !== "string") {
+      const m = isRecord(obj.message) ? obj.message : obj;
+      if (m.role === "user") {
+        const typed = extractText(m.content).trim();
+        if (typed) firstTyped = typed;
+      }
+    }
     // pi records a session's display name as a `session_info` entry, and the
     // latest one wins — including when it is written after the messages it
     // will end up labelling, so the title is applied once the file is read.
@@ -70,6 +81,11 @@ export function readSessionDocs(path: string): Doc[] {
     const doc = docFromEntry(obj, session, path);
     if (doc) docs.push(doc);
   }
+  // No session_info name: label it after its first prompt rather than the
+  // raw `<timestamp>_<uuid>` log id, which says nothing and repeats the date
+  // the result already shows. A bare slash command yields "" and falls
+  // through to the id, the last resort.
+  if (!title && firstTyped) title = sessionTitle(firstTyped) || undefined;
   if (title) for (const doc of docs) doc.title = title;
   return docs;
 }

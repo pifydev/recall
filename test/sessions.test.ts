@@ -62,3 +62,26 @@ test("listSessionFiles finds .jsonl recursively", () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a session nobody named is labelled after its first prompt, never the raw log id", () => {
+  const { mkdtempSync, writeFileSync, rmSync } = require("node:fs") as typeof import("node:fs");
+  const { tmpdir } = require("node:os") as typeof import("node:os");
+  const { join } = require("node:path") as typeof import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "recall-label-"));
+  try {
+    const file = join(dir, "2026-09-26T10-00-00_0000-uuid.jsonl");
+    writeFileSync(
+      file,
+      [
+        JSON.stringify({ type: "custom", customType: "pify-memory", message: { role: "user", content: "injected plumbing" } }),
+        JSON.stringify({ type: "message", message: { role: "user", content: "Fix the **flaky** limiter test", timestamp: 1 } }),
+        JSON.stringify({ type: "message", message: { role: "assistant", content: "On it.", timestamp: 2 } }),
+      ].join("\n"),
+    );
+    const docs = readSessionDocs(file);
+    assert.ok(docs.length >= 2);
+    assert.equal(docs[0]!.title, "Fix the flaky limiter test", "the first typed prompt, cleaned, not the injected message");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

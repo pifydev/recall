@@ -1,6 +1,6 @@
 {
   "name": "@pify/recall",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Full-text search across your past pi sessions: a session_search tool over the local session logs, so the agent can recall what it did before",
   "keywords": [
     "pi-package",

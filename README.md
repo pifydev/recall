@@ -30,6 +30,18 @@ It returns the most relevant snippets with their session id and date, ranked by 
 
 `/recall` shows the index status; `/recall <query>` searches from the command line; `/recall reindex` rebuilds from scratch.
 
+### This session, not past ones
+
+`session_history` — the same kind of search over the **current** session's complete branch: every user, assistant and tool-result entry, including everything compaction has already summarized away.
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `query` | string | A command, an error string, a file name |
+| `limit` | number, optional | Max matching entries (default 8, max 25) |
+| `context` | number, optional | Characters of snippet around each match (default 220, max 1000) |
+
+The index above deliberately skips the live session, and once [`@pify/compact`](https://github.com/pifydev/compact) (or pi itself) compacts, only the summary stays in context — but pi keeps the whole branch, append-only. The exact detail the summary dropped (what a command printed, the error string, the snippet you read) was still on disk and unreachable. This tool greps the branch, read fresh on every call, and labels each hit with its position and entry id. Split to remember: `session_search` is past sessions (indexed); `session_history` is this one (live, never indexed). (From can1357/oh-my-pi's `history://current/full`.)
+
 ## Session names
 
 A session with no display name is an opaque log id — in pi's session picker, and in this package's own results. So the first thing you type becomes the session's name, once, and only when nothing else has named it: an existing name (yours, or another extension's) always wins, and the attempt happens at most once per session. A bare slash command (`/resume`) is skipped — it says nothing about the work.
@@ -41,7 +53,7 @@ Results are then labelled with that name instead of the id:
   ...the matching snippet...
 ```
 
-Names are read back out of pi's own `session_info` entries, so a session you named by hand is labelled correctly too, and a session that never got one still falls back to its id. A fresh session is named from the prompt that starts it (pi has not appended that prompt to the session yet when the hook runs, which is why earlier versions never named anything new); a resumed session keeps its original first prompt as the name. Opt out with `PIFY_RECALL_NO_AUTONAME=1`. (Idea from trim21/pi-extensions.)
+Names are read back out of pi's own `session_info` entries, so a session you named by hand is labelled correctly too. A session that never got one — everything recorded before this package was installed, or with auto-naming opted out — is labelled after the first thing typed in it (the same rule, applied when the log is read), and only a session with no usable first prompt falls back to its raw id. A fresh session is named from the prompt that starts it (pi has not appended that prompt to the session yet when the hook runs, which is why earlier versions never named anything new); a resumed session keeps its original first prompt as the name. Opt out with `PIFY_RECALL_NO_AUTONAME=1`. (Idea from trim21/pi-extensions.)
 
 ## How it works
 

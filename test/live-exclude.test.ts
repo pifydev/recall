@@ -98,8 +98,9 @@ test("session_search tool excludes the live session via ctx.sessionManager", asy
       const { tool } = wire();
       const res = await tool.execute("t1", { query: "quokkaterm" }, undefined, undefined, makeCtx(live));
       const text = contentText(res);
-      assert.ok(!text.includes("[live "), `live session must be excluded — got:\n${text}`);
-      assert.ok(text.includes("[past "), `past session must be present — got:\n${text}`);
+      // Labels are now the session's first prompt, so judge by the snippet text, not the id.
+      assert.ok(!text.includes("in the live session"), `live session must be excluded — got:\n${text}`);
+      assert.ok(text.includes("in the past session"), `past session must be present — got:\n${text}`);
       assert.equal(res.details.count, 1, "only the past session should be returned");
       // The live file is not even read while it is live: it grows every turn
       // and used to force a full postings rebuild on every search.
@@ -134,8 +135,9 @@ test("/recall search command excludes the live session via ctx.sessionManager", 
       const notified: string[] = [];
       await command.handler("quokkaterm", makeCtx(live, notified));
       const text = notified.join("\n");
-      assert.ok(!text.includes("[live "), `live session must be excluded — got:\n${text}`);
-      assert.ok(text.includes("[past "), `past session must be present — got:\n${text}`);
+      // Labels are now the session's first prompt, so judge by the snippet text, not the id.
+      assert.ok(!text.includes("in the live session"), `live session must be excluded — got:\n${text}`);
+      assert.ok(text.includes("in the past session"), `past session must be present — got:\n${text}`);
     });
   } finally {
     rmSync(root, { recursive: true, force: true });

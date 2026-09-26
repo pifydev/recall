@@ -21,6 +21,7 @@ import { join } from "node:path";
 
 import { loadIndex, saveIndex } from "../src/persist.ts";
 import { listSessionFiles, readSessionDocs } from "../src/sessions.ts";
+import { formatHistory, searchBranch } from "../src/history.ts";
 import { syncIndex, docCount } from "../src/index-core.ts";
 import { search } from "../src/search.ts";
 import { formatHits } from "../src/format.ts";
@@ -162,6 +163,49 @@ export default function recall(pi: ExtensionAPI) {
       return {
         content: [{ type: "text", text: formatHits(query, hits) }],
         details: { count: hits.length, indexed: docCount(index) },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "session_history",
+    label: "Search this session's history",
+    promptSnippet: "Grep the current session's full, uncompacted history",
+    promptGuidelines: [
+      "After a compaction, exact detail — a command and what it printed, an error string, a file snippet — is gone from your context but not from the session: session_history greps the full current branch. Use it before re-running something to recover the earlier result.",
+      "session_search is for PAST sessions; session_history is for THIS one. Query with distinctive terms, not sentences.",
+    ],
+    description:
+      "Full-text search over the current session's complete branch — every user, assistant and tool-result entry, " +
+      "including everything compaction has summarized away. Returns matching entries with their position and id. " +
+      "Local, instant, no network.",
+    parameters: Type.Object({
+      query: Type.String({ description: "Distinctive search terms (a command, an error string, a file name)" }),
+      limit: Type.Optional(Type.Number({ description: "Max matching entries (default 8, max 25)" })),
+      context: Type.Optional(Type.Number({ description: "Characters of snippet around each match (default 220, max 1000)" })),
+    }),
+    async execute(
+      _id,
+      params: { query: string; limit?: number; context?: number },
+      _signal: AbortSignal | undefined,
+      _onUpdate: unknown,
+      ctx: ExtensionContext,
+    ): Promise<{
+      content: Array<{ type: "text"; text: string }>;
+      details: Record<string, unknown>;
+      isError?: boolean;
+    }> {
+      const query = String(params.query ?? "").trim();
+      if (!query) return { content: [{ type: "text", text: "Empty query." }], details: {}, isError: true };
+      // Read the branch fresh every call: it grows every turn, and pi keeps
+      // it whole even after compaction — that is the whole point.
+      const branch = ctx.sessionManager.getBranch() as unknown[];
+      const limit = Math.max(1, Math.min(25, Math.round(params.limit ?? 8)));
+      const snippetChars = Math.max(40, Math.min(1000, Math.round(params.context ?? 220)));
+      const hits = searchBranch(branch, query, { limit, snippetChars });
+      return {
+        content: [{ type: "text", text: formatHistory(query, hits, branch.length) }],
+        details: { count: hits.length, entries: branch.length },
       };
     },
   });
