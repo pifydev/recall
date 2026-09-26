@@ -18,10 +18,14 @@
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 
 import { loadIndex, saveIndex } from "../src/persist.ts";
 import { listSessionFiles, readSessionDocs } from "../src/sessions.ts";
 import { formatHistory, searchBranch } from "../src/history.ts";
+import { AUTORECALL_LIMIT, AUTORECALL_TYPE, autoRecallBlock, worthRecalling } from "../src/autorecall.ts";
+import { claudeProjectDir, readClaudeDocs } from "../src/foreign-claude.ts";
 import { syncIndex, docCount } from "../src/index-core.ts";
 import { search } from "../src/search.ts";
 import { formatHits } from "../src/format.ts";
@@ -35,11 +39,31 @@ export default function recall(pi: ExtensionAPI) {
   let loaded = false;
   let indexPath = "";
   let sessionsDir = "";
+  /** Claude Code's logs for this repository, when opted in (PIFY_RECALL_CLAUDE=1) and present. */
+  let claudeDir = "";
 
-  function paths(): void {
+  function paths(cwd?: string): void {
     const dir = getAgentDir();
     indexPath = join(dir, "recall", "index.json");
     sessionsDir = join(dir, "sessions");
+    if (cwd !== undefined) {
+      const candidate = process.env.PIFY_RECALL_CLAUDE === "1" ? claudeProjectDir(cwd, homedir()) : "";
+      claudeDir = candidate && existsSync(candidate) ? candidate : "";
+    }
+  }
+
+  /** Which reader a session file needs: Claude Code's shape for its directory, pi's for everything else. */
+  function readDocsFor(path: string) {
+    if (claudeDir && path.replace(/\\/g, "/").startsWith(claudeDir.replace(/\\/g, "/"))) {
+      let raw = "";
+      try {
+        raw = readFileSync(path, "utf8");
+      } catch {
+        return [];
+      }
+      return readClaudeDocs(path, raw);
+    }
+    return readSessionDocs(path);
   }
 
   /**
@@ -55,8 +79,8 @@ export default function recall(pi: ExtensionAPI) {
       index = loadIndex(indexPath);
       loaded = true;
     }
-    const files = listSessionFiles(sessionsDir);
-    if (syncIndex(index, files, readSessionDocs, { skipPath: livePath })) saveIndex(indexPath, index);
+    const files = [...listSessionFiles(sessionsDir), ...(claudeDir ? listSessionFiles(claudeDir) : [])];
+    if (syncIndex(index, files, readDocsFor, { skipPath: livePath })) saveIndex(indexPath, index);
   }
 
   /** The file pi is writing this session into, when the host can say. */
@@ -69,8 +93,9 @@ export default function recall(pi: ExtensionAPI) {
   }
 
   pi.on("session_start", async (_event, ctx) => {
-    paths();
+    paths(ctx.cwd);
     named = false;
+    autoRecalled = false;
     const live = liveFile(ctx);
     // Fire-and-forget: never delay session start on indexing.
     const t = setTimeout(() => {
@@ -85,6 +110,29 @@ export default function recall(pi: ExtensionAPI) {
 
   /** Whether this session's naming attempt has already happened. */
   let named = false;
+  /** Whether this session's one unprompted recall has already happened. */
+  let autoRecalled = false;
+
+  // Opt-in (PIFY_RECALL_AUTORECALL=1): on the first substantial prompt of a
+  // session, hand the model the top past-session hits as a hidden note. Once
+  // per session, bounded, never touching the system prompt. The naming hook
+  // below is a separate handler on the same event; both return quickly.
+  pi.on("before_agent_start", async (event, ctx) => {
+    if (autoRecalled || process.env.PIFY_RECALL_AUTORECALL !== "1") return undefined;
+    autoRecalled = true;
+    try {
+      const prompt = String((event as { prompt?: unknown }).prompt ?? "");
+      if (!worthRecalling(prompt)) return undefined;
+      const excludePath = liveFile(ctx);
+      sync(excludePath);
+      const hits = search(index, prompt, { limit: AUTORECALL_LIMIT, excludePath });
+      const block = autoRecallBlock(hits);
+      if (!block) return undefined;
+      return { message: { customType: AUTORECALL_TYPE, content: block, display: false } };
+    } catch {
+      return undefined; // recall is a nicety; it must never delay or break a turn
+    }
+  });
 
   // A session with no display name is an opaque log id — in pi's picker and in
   // this package's own results. The first thing you typed is the best label, so

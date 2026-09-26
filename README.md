@@ -55,6 +55,14 @@ Results are then labelled with that name instead of the id:
 
 Names are read back out of pi's own `session_info` entries, so a session you named by hand is labelled correctly too. A session that never got one — everything recorded before this package was installed, or with auto-naming opted out — is labelled after the first thing typed in it (the same rule, applied when the log is read), and only a session with no usable first prompt falls back to its raw id. A fresh session is named from the prompt that starts it (pi has not appended that prompt to the session yet when the hook runs, which is why earlier versions never named anything new); a resumed session keeps its original first prompt as the name. Opt out with `PIFY_RECALL_NO_AUTONAME=1`. (Idea from trim21/pi-extensions.)
 
+## Auto-recall, if you turn it on
+
+`PIFY_RECALL_AUTORECALL=1` makes the first substantial prompt of a session (twenty-plus characters, three-plus distinct terms, not a slash command) run against the index unprompted, and hands the model the top three past-session snippets as a hidden note framed as prior context — verify before relying on it, `session_search` for more. Once per session, capped at a couple of thousand characters, and never in the system prompt, so nothing about the cache changes. Off by default because unprompted context is a cost you should choose.
+
+## Claude Code's sessions, if you turn it on
+
+`PIFY_RECALL_CLAUDE=1` also indexes Claude Code's own logs for the **current repository** (`~/.claude/projects/<cwd-slug>/*.jsonl`): user and assistant text only, tool calls and results skipped, labelled `claude · <first prompt>` in results so you can tell them apart. Current repository only, so the corpus stays bounded; the format is parsed tolerantly and anything unrecognised is skipped. Off by default; the index stays local and zero-dependency either way.
+
 ## How it works
 
 At session start (and lazily before each search) it syncs an inverted index of your session logs: only files whose size or mtime changed are re-read, so a steady corpus costs almost nothing. The live session is not read at all while it is live — it grows every turn, so it could never look unchanged, and one changed file used to mean rebuilding every posting and rewriting the whole index on every search; it is indexed once it is no longer the one being written, and it never appears in its own results either way. The index is one JSON file under `<agentDir>/recall/`, written atomically; a corrupt or wrong-version file is simply rebuilt. The corpus is bounded (newest sessions win the budget) so it never grows without limit. Words are words: a session that talks about `constructor` or `__proto__` indexes and searches like any other (the postings map has no prototype to collide with).
