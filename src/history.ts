@@ -61,7 +61,22 @@ export function entryText(entry: unknown): { id: string | null; role: string; te
   const message = isRecord(entry.message) ? entry.message : null;
   if (message) {
     const role = typeof message.role === "string" ? message.role : "message";
-    const text = contentText(message.content ?? message.output).trim();
+    let text = contentText(message.content ?? message.output).trim();
+    // pi 0.99: calls a tool made itself (a codemode script) never appear as
+    // tool calls in the transcript; a bounded record sits on the script's
+    // result. Fold them in so a command run from a script is still findable.
+    const nested = isRecord(message.nestedCalls) && Array.isArray(message.nestedCalls.calls) ? message.nestedCalls.calls : [];
+    for (const call of nested) {
+      if (!isRecord(call) || typeof call.name !== "string") continue;
+      let args = "";
+      try {
+        args = call.arguments === undefined ? "" : JSON.stringify(call.arguments);
+      } catch {
+        args = "";
+      }
+      text += `\n[nested] ${call.name}(${args})${typeof call.error === "string" ? ` → ${call.error}` : ""}`;
+    }
+    text = text.trim();
     return text ? { id, role, text } : null;
   }
   // Non-message entries worth finding: a compaction summary, a custom entry with text.

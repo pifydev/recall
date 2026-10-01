@@ -96,7 +96,7 @@ test("session_search tool excludes the live session via ctx.sessionManager", asy
     // No PI_SESSION_FILE: the exclusion must come from ctx, not the env.
     await withEnv({ [AGENT_DIR_ENV]: root, PI_SESSION_FILE: undefined }, async () => {
       const { tool } = wire();
-      const res = await tool.execute("t1", { query: "quokkaterm" }, undefined, undefined, makeCtx(live));
+      const res = await tool.execute("t1", { query: "quokkaterm" }, undefined, undefined, makeCtx(live) as never); // pi 0.99 types ctx as ExtensionToolContext; the tool reads none of its extras
       const text = contentText(res);
       // Labels are now the session's first prompt, so judge by the snippet text, not the id.
       assert.ok(!text.includes("in the live session"), `live session must be excluded — got:\n${text}`);
@@ -117,7 +117,7 @@ test("session_search falls back to PI_SESSION_FILE when ctx has no session file"
     await withEnv({ [AGENT_DIR_ENV]: root, PI_SESSION_FILE: live }, async () => {
       const { tool } = wire();
       // ctx reports no live file → the env fallback still excludes it.
-      const res = await tool.execute("t1", { query: "quokkaterm" }, undefined, undefined, makeCtx(undefined));
+      const res = await tool.execute("t1", { query: "quokkaterm" }, undefined, undefined, makeCtx(undefined) as never); // pi 0.99 types ctx as ExtensionToolContext; the tool reads none of its extras
       const text = contentText(res);
       assert.ok(!text.includes("[live "), `env fallback must exclude the live session — got:\n${text}`);
       assert.equal(res.details.count, 1);

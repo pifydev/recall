@@ -47,3 +47,28 @@ test("formatHistory names the entry and stays bounded", () => {
   const tiny = formatHistory("limiter", hits, branch.length, 120);
   assert.match(tiny, /more omitted/);
 });
+
+test("calls a codemode script made are folded into the script's result entry (pi 0.99 nestedCalls)", () => {
+  const entries = [
+    {
+      id: "e9",
+      type: "message",
+      message: {
+        role: "toolResult",
+        toolName: "codemode",
+        content: [{ type: "text", text: "script done" }],
+        nestedCalls: {
+          calls: [
+            { id: "c1/1", name: "bash", arguments: { command: "bun test test/limiter.test.ts" }, status: "ok" },
+            { id: "c1/2", name: "read", arguments: { path: "src/limiter.ts" }, status: "error", error: "ENOENT" },
+          ],
+          complete: true,
+        },
+      },
+    },
+  ];
+  const e = entryText(entries[0])!;
+  assert.match(e.text, /\[nested\] bash\(.*limiter\.test\.ts/);
+  assert.match(e.text, /\[nested\] read\(.*ENOENT/);
+  assert.equal(searchBranch(entries, "limiter")[0]!.id, "e9");
+});
