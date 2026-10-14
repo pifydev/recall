@@ -31,6 +31,7 @@ import { search } from "../src/search.ts";
 import { formatHits } from "../src/format.ts";
 import { namingText, sessionTitle } from "../src/title.ts";
 import { emptyIndex, type RecallIndex } from "../src/types.ts";
+import { isUserRun } from "../src/run-origin.ts";
 
 type UiContext = ExtensionContext;
 
@@ -118,6 +119,10 @@ export default function recall(pi: ExtensionAPI) {
   // per session, bounded, never touching the system prompt. The naming hook
   // below is a separate handler on the same event; both return quickly.
   pi.on("before_agent_start", async (event, ctx) => {
+    // pi 1.2.0 fires this for runs other extensions start with a custom
+    // message too (a background job's result, a goal's continuation); those
+    // carry no prompt and must not use up the one recall this session gets.
+    if (!isUserRun(event)) return undefined;
     if (autoRecalled || process.env.PIFY_RECALL_AUTORECALL !== "1") return undefined;
     autoRecalled = true;
     try {
@@ -140,7 +145,7 @@ export default function recall(pi: ExtensionAPI) {
   // never destructive: an existing name (yours or another extension's) wins.
   // Opt out with PIFY_RECALL_NO_AUTONAME=1.
   pi.on("before_agent_start", async (event, ctx) => {
-    if (named) return;
+    if (named || !isUserRun(event)) return;
     if (process.env.PIFY_RECALL_NO_AUTONAME === "1") {
       named = true;
       return;
